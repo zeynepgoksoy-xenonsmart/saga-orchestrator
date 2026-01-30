@@ -2,11 +2,13 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { AccountClientService } from '../clients/account-client.service';
 import { WorkspaceClientService } from '../clients/workspace-client.service';
-import {  v4 as uuidv4 } from 'uuid';
+import { v4 as uuidv4 } from 'uuid';
 import { SagaStep } from './types/saga-step.type';
 import { SagaResponseDto } from './dto/saga-response.dto';
 import { CreateUserSagaDataDto } from './dto/create-user-saga.dto';
 import { SagaStatus } from '../common/saga-status.enum';
+import type { AccountResponse } from '../../../proto/generated/account';
+import type { WorkspaceResponse } from '../../../proto/generated/workspace';
 
 @Injectable()
 export class SagaService {
@@ -19,7 +21,7 @@ export class SagaService {
 
   // saga.service.ts - executeCreateUserSaga metodu
 
-async executeCreateUserSaga(dto: CreateUserSagaDataDto): Promise<SagaResponseDto<CreateUserSagaDataDto>> {
+async executeCreateUserSaga(dto: CreateUserSagaDataDto): Promise<SagaResponseDto<{ account: AccountResponse; workspace: WorkspaceResponse }>> {
   const sagaId = uuidv4();
   const startTime = Date.now();
   const completedSteps: SagaStep[] = [];
@@ -35,7 +37,7 @@ async executeCreateUserSaga(dto: CreateUserSagaDataDto): Promise<SagaResponseDto
     const accountStepStart = Date.now();
     this.logger.log(`[${sagaId}] Step 1: Creating account...`);
     
-    const account = await this.accountClient.createAccount({
+    const account: AccountResponse = await this.accountClient.createAccount({
       email: dto.account.email,
       name: dto.account.name,
       password: dto.account.password,
@@ -47,7 +49,7 @@ async executeCreateUserSaga(dto: CreateUserSagaDataDto): Promise<SagaResponseDto
       order: 1,
       status: 'SUCCESS',
       service: 'account-service',
-      endpoint: 'POST /accounts',
+      endpoint: 'CreateAccount',
       resourceId: accountId || undefined,
       timestamps: {
         startedAt: new Date(accountStepStart),
@@ -65,7 +67,7 @@ async executeCreateUserSaga(dto: CreateUserSagaDataDto): Promise<SagaResponseDto
       throw new Error('Account ID is required for workspace creation');
     }
     
-    const workspace = await this.workspaceClient.createWorkspace({
+    const workspace: WorkspaceResponse = await this.workspaceClient.createWorkspace({
       accountId: accountId,
       name: dto.workspace.name,
     });
@@ -76,7 +78,7 @@ async executeCreateUserSaga(dto: CreateUserSagaDataDto): Promise<SagaResponseDto
       order: 2,
       status: 'SUCCESS',
       service: 'workspace-service',
-      endpoint: 'POST /workspaces',
+      endpoint: 'CreateWorkspace',
       resourceId: workspaceId || undefined,
       timestamps: {
         startedAt: new Date(workspaceStepStart),
@@ -114,7 +116,13 @@ async executeCreateUserSaga(dto: CreateUserSagaDataDto): Promise<SagaResponseDto
     // ========================
     this.logger.error(`[${sagaId}] Saga failed, starting compensation...`, error);
 
-    const failedStep = workspaceId ? 'CREATE_WORKSPACE' : 'CREATE_ACCOUNT';
+    
+    let failedStep: string;
+    if (!accountId) {
+      failedStep = 'CREATE_ACCOUNT';
+    } else {
+      failedStep = 'CREATE_WORKSPACE';
+    }
 
     // Compensate Account
     if (accountId) {
@@ -129,7 +137,7 @@ async executeCreateUserSaga(dto: CreateUserSagaDataDto): Promise<SagaResponseDto
           order: 1,
           status: 'COMPENSATED',
           service: 'account-service',
-          endpoint: `POST /accounts/${accountId}/compensate`,
+          endpoint: 'CompensateAccount',
           resourceId: accountId,
           timestamps: {
             startedAt: new Date(compensateStart),

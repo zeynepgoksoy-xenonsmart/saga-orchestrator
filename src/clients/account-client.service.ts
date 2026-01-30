@@ -1,62 +1,41 @@
 // clients/account-client.service.ts
-import { Injectable, HttpException } from '@nestjs/common';
-import { HttpService } from '@nestjs/axios';
-import { ConfigService } from '@nestjs/config';
+import { Injectable, Inject, OnModuleInit } from '@nestjs/common';
+import type { ClientGrpc } from '@nestjs/microservices';
 import { firstValueFrom } from 'rxjs';
+import {
+  AccountServiceClient,
+  CreateAccountRequest,
+  CompensateAccountRequest,
+  GetAccountRequest,
+  AccountResponse,
+} from '../../../proto/generated/account';
 
 @Injectable()
-export class AccountClientService {
-  private readonly accountServiceUrl: string;
+export class AccountClientService implements OnModuleInit {
+  private accountService: AccountServiceClient;
 
-  constructor(
-    private readonly httpService: HttpService,
-    private readonly configService: ConfigService,
-  ) {
-    this.accountServiceUrl = 
-      this.configService.get('ACCOUNT_SERVICE_URL') || 'http://localhost:3003';
+  constructor(@Inject('ACCOUNT_GRPC') private readonly client: ClientGrpc) {}
+
+  onModuleInit() {
+    this.accountService = this.client.getService<AccountServiceClient>('AccountService');
   }
 
-  async createAccount(data: { email: string; name: string; password: string }) {
-    try {
-      const response = await firstValueFrom(
-        this.httpService.post(`${this.accountServiceUrl}/accounts`, data)
-      );
-      return response.data;
-    } catch (error) {
-      throw new HttpException(
-        error.response?.data?.message || 'Failed to create account',
-        error.response?.status || 500,
-      );
-    }
+  async createAccount(data: { email: string; name: string; password: string }): Promise<AccountResponse> {
+    const request: CreateAccountRequest = {
+      email: data.email,
+      name: data.name,
+      password: data.password,
+    };
+    return firstValueFrom(this.accountService.CreateAccount(request));
   }
 
-  async compensateAccount(accountId: string) {
-    try {
-      const response = await firstValueFrom(
-        this.httpService.post(
-          `${this.accountServiceUrl}/accounts/${accountId}/compensate`
-        )
-      );
-      return response.data;
-    } catch (error) {
-      throw new HttpException(
-        error.response?.data?.message || 'Failed to compensate account',
-        error.response?.status || 500,
-      );
-    }
+  async compensateAccount(accountId: string): Promise<AccountResponse> {
+    const request: CompensateAccountRequest = { accountId };
+    return firstValueFrom(this.accountService.CompensateAccount(request));
   }
 
-  async getAccount(accountId: string) {
-    try {
-      const response = await firstValueFrom(
-        this.httpService.get(`${this.accountServiceUrl}/accounts/${accountId}`)
-      );
-      return response.data;
-    } catch (error) {
-      throw new HttpException(
-        error.response?.data?.message || 'Failed to get account',
-        error.response?.status || 500,
-      );
-    }
+  async getAccount(accountId: string): Promise<AccountResponse> {
+    const request: GetAccountRequest = { accountId };
+    return firstValueFrom(this.accountService.GetAccount(request));
   }
 }
