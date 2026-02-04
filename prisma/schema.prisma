@@ -1,0 +1,95 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================
+// SAGA EXECUTION TRACKING
+// ============================================
+
+model SagaExecution {
+  id                String    @id @default(uuid())
+  sagaId            String    @unique  // Business saga ID
+  sagaType          String    // "CREATE_USER", "UPDATE_ACCOUNT", vb.
+  status            String    // PENDING, IN_PROGRESS, COMPLETED, FAILED, COMPENSATING, COMPENSATED
+  
+  // Input/Output
+  inputData         Json      @map("input_data")
+  outputData        Json?     @map("output_data")
+  
+  // Step Tracking
+  completedSteps    Json      @default("[]") @map("completed_steps")    // ["step1", "step2"]
+  compensatedSteps  Json      @default("[]") @map("compensated_steps")  // ["step2", "step1"]
+  currentStep       String?   @map("current_step")
+  
+  // Error Handling
+  errorMessage      String?   @map("error_message")
+  errorCode         String?   @map("error_code")
+  errorStack        String?   @map("error_stack")
+  
+  // Timing
+  startedAt         DateTime  @default(now()) @map("started_at")
+  lastUpdatedAt     DateTime  @updatedAt @map("last_updated_at")
+  completedAt       DateTime? @map("completed_at")
+  
+  // Retry Logic
+  retryCount        Int       @default(0) @map("retry_count")
+  maxRetries        Int       @default(3) @map("max_retries")
+  nextRetryAt       DateTime? @map("next_retry_at")
+  
+  // Context
+  userId            String?   @map("user_id")
+  metadata          Json?
+  
+  // Relations
+  steps             SagaStepMetadata[]
+  
+  // Optimized Indexes
+  @@index([status, lastUpdatedAt])
+  @@index([sagaType, status])
+  @@index([userId])
+  @@index([startedAt])
+  @@index([nextRetryAt])  // Retry job için
+  @@map("saga_executions")
+}
+
+// ============================================
+// SAGA STEP DETAILS
+// ============================================
+
+model SagaStepMetadata {
+  id                  String    @id @default(uuid())
+  sagaId              String    @map("saga_id")
+  stepName            String    @map("step_name")
+  stepOrder           Int       @map("step_order")
+  status              String    // PENDING, IN_PROGRESS, COMPLETED, FAILED, COMPENSATED
+  
+  // Target Resource
+  serviceName         String    @map("service_name")      // "account-service"
+  resourceType        String    @map("resource_type")     // "Account", "Workspace"
+  resourceId          String?   @map("resource_id")       // "acc-123"
+  snapshotId          String?   @map("snapshot_id")       // Compensation için
+  
+  // Execution Details
+  requestPayload      Json?     @map("request_payload")
+  responsePayload     Json?     @map("response_payload")
+  errorMessage        String?   @map("error_message")
+  
+  // Timing
+  startedAt           DateTime  @default(now()) @map("started_at")
+  completedAt         DateTime? @map("completed_at")
+  duration            Int?      // milliseconds
+  
+  // Relations
+  sagaExecution       SagaExecution @relation(fields: [sagaId], references: [sagaId], onDelete: Cascade)
+  
+  @@index([sagaId, stepOrder])
+  @@index([resourceType, resourceId])
+  @@index([status])
+  @@map("saga_step_metadata")
+}
+
