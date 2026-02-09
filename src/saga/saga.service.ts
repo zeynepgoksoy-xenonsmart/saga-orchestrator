@@ -11,6 +11,25 @@ import { SagaStatus } from '../common/saga-status.enum';
 import type { AccountResponse } from '../../../proto/generated/account';
 import type { WorkspaceResponse } from '../../../proto/generated/workspace';
 
+type PersistedSagaStep = Omit<SagaStep, 'timestamps'> & {
+  timestamps: {
+    startedAt: string;
+    completedAt: string;
+    duration: number;
+  };
+};
+
+function toPersistedSagaStep(step: SagaStep): PersistedSagaStep {
+  return {
+    ...step,
+    timestamps: {
+      startedAt: step.timestamps.startedAt.toISOString(),
+      completedAt: step.timestamps.completedAt.toISOString(),
+      duration: step.timestamps.duration,
+    },
+  };
+}
+
 @Injectable()
 export class SagaService {
   private readonly logger = new Logger(SagaService.name);
@@ -31,7 +50,6 @@ async executeCreateUserSaga(dto: CreateUserSagaDataDto): Promise<SagaResponseDto
 
   let accountId: string | null = null;
   let workspaceId: string | null = null;
-
   // Track step metadata rows so we can mark them FAILED if an exception happens mid-step
   let createAccountStepMetaId: string | null = null;
   let createWorkspaceStepMetaId: string | null = null;
@@ -79,6 +97,8 @@ async executeCreateUserSaga(dto: CreateUserSagaDataDto): Promise<SagaResponseDto
         requestPayload: {
           email: dto.account.email,
           name: dto.account.name,
+          phoneNumber: dto.account.phoneNumber,
+          postalCode: dto.account.postalCode,
         } as any,
         startedAt: new Date(accountStepStart),
       },
@@ -89,6 +109,8 @@ async executeCreateUserSaga(dto: CreateUserSagaDataDto): Promise<SagaResponseDto
       email: dto.account.email,
       name: dto.account.name,
       password: dto.account.password,
+      phoneNumber: dto.account.phoneNumber,
+      postalCode: dto.account.postalCode,
     });
     accountId = account.id;
 
@@ -120,7 +142,7 @@ async executeCreateUserSaga(dto: CreateUserSagaDataDto): Promise<SagaResponseDto
     await this.prisma.sagaExecution.update({
       where: { sagaId },
       data: {
-        completedSteps: completedSteps as any,
+        completedSteps: completedSteps.map(toPersistedSagaStep) as any,
         currentStep: 'CREATE_WORKSPACE',
       },
     });
@@ -145,6 +167,8 @@ async executeCreateUserSaga(dto: CreateUserSagaDataDto): Promise<SagaResponseDto
         requestPayload: {
           ownerId: accountId,
           name: dto.workspace.name,
+          address: dto.workspace.address,
+          country: dto.workspace.country,
         } as any,
         startedAt: new Date(workspaceStepStart),
       },
@@ -153,7 +177,9 @@ async executeCreateUserSaga(dto: CreateUserSagaDataDto): Promise<SagaResponseDto
     
     const workspace: WorkspaceResponse = await this.workspaceClient.createWorkspace({
       accountId: accountId,
-      name: dto.workspace.name
+      name: dto.workspace.name,
+      address: dto.workspace.address,
+      country: dto.workspace.country,
     });
     workspaceId = workspace.id;
 
@@ -188,7 +214,7 @@ async executeCreateUserSaga(dto: CreateUserSagaDataDto): Promise<SagaResponseDto
       where: { sagaId },
       data: {
         status: SagaStatus.COMPLETED,
-        completedSteps: completedSteps as any,
+        completedSteps: completedSteps.map(toPersistedSagaStep) as any,
         currentStep: null,
         completedAt: new Date(),
         outputData: {
@@ -272,7 +298,7 @@ async executeCreateUserSaga(dto: CreateUserSagaDataDto): Promise<SagaResponseDto
           where: { sagaId },
           data: {
             status: SagaStatus.FAILED,
-            completedSteps: completedSteps as any,
+            completedSteps: completedSteps.map(toPersistedSagaStep) as any,
             currentStep: failedStep,
             errorMessage: (error as any)?.message ?? 'Unknown error',
             errorCode: (error as any)?.code ? String((error as any).code) : 'SAGA_EXECUTION_FAILED',
@@ -305,7 +331,7 @@ async executeCreateUserSaga(dto: CreateUserSagaDataDto): Promise<SagaResponseDto
               where: { sagaId },
               data: {
                 status: SagaStatus.COMPENSATING,
-                compensatedSteps: compensatedSteps as any,
+                compensatedSteps: compensatedSteps.map(toPersistedSagaStep) as any,
                 currentStep: 'COMPENSATE_ACCOUNT',
               },
             });
@@ -375,8 +401,8 @@ async executeCreateUserSaga(dto: CreateUserSagaDataDto): Promise<SagaResponseDto
               where: { sagaId },
               data: {
                 status: SagaStatus.COMPENSATED,
-                completedSteps: completedSteps as any,
-                compensatedSteps: compensatedSteps as any,
+                completedSteps: completedSteps.map(toPersistedSagaStep) as any,
+                compensatedSteps: compensatedSteps.map(toPersistedSagaStep) as any,
                 currentStep: null,
                 completedAt: new Date(),
               },
@@ -419,8 +445,8 @@ async executeCreateUserSaga(dto: CreateUserSagaDataDto): Promise<SagaResponseDto
           where: { sagaId },
           data: {
             status: SagaStatus.FAILED,
-            completedSteps: completedSteps as any,
-            compensatedSteps: compensatedSteps as any,
+            completedSteps: completedSteps.map(toPersistedSagaStep) as any,
+            compensatedSteps: compensatedSteps.map(toPersistedSagaStep) as any,
             completedAt: new Date(),
           },
         });

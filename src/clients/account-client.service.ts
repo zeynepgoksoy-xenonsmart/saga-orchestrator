@@ -20,11 +20,13 @@ export class AccountClientService implements OnModuleInit {
     this.accountService = this.client.getService<AccountServiceClient>('AccountService');
   }
 
-  async createAccount(data: { email: string; name: string; password: string }): Promise<AccountResponse> {
+  async createAccount(data: { email: string; name: string; password: string; phoneNumber?: string; postalCode?: string }): Promise<AccountResponse> {
     const request: CreateAccountRequest = {
       email: data.email,
       name: data.name,
       password: data.password,
+      phoneNumber: data.phoneNumber,
+      postalCode: data.postalCode,
     };
     return firstValueFrom(this.accountService.CreateAccount(request));
   }

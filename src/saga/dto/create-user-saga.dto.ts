@@ -7,6 +7,8 @@ export class CreateUserSagaDataDto {
       email: string;
       name: string;
       password: string;
+      phoneNumber?: string;
+      postalCode?: string;
     };
   
     /**
@@ -14,5 +16,7 @@ export class CreateUserSagaDataDto {
      */
     workspace: {
       name: string;
+      address?: string;
+      country?: string;
     };
   }

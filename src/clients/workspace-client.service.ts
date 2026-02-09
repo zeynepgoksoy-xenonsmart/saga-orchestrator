@@ -19,10 +19,12 @@ export class WorkspaceClientService implements OnModuleInit {
     this.workspaceService = this.client.getService<WorkspaceServiceClient>('WorkspaceService');
   }
 
-  async createWorkspace(data: { accountId: string; name: string }): Promise<WorkspaceResponse> {
+  async createWorkspace(data: { accountId: string; name: string; address?: string; country?: string }): Promise<WorkspaceResponse> {
     const request: CreateWorkspaceRequest = {
       name: data.name,
       ownerId: data.accountId,
+      address: data.address,
+      country: data.country,
     };
     return firstValueFrom(this.workspaceService.CreateWorkspace(request));
   }
