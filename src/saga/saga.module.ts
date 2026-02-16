@@ -4,15 +4,16 @@ import { SagaController } from './saga.controller';
 import { SagaService } from './saga.service';
 import { AccountClientService } from '../clients/account-client.service';
 import { WorkspaceClientService } from '../clients/workspace-client.service';
-import { ClientsModule } from '@nestjs/microservices';
-import { Transport } from '@nestjs/microservices';
+import { ClientsModule, Transport } from '@nestjs/microservices';
 import { join } from 'path';
 import 'dotenv/config';
 import { ConfigModule, ConfigService } from '@nestjs/config';
+import { PrismaModule } from 'src/prisma/prisma.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot(),
+    PrismaModule,
     ClientsModule.registerAsync([
       {
         name: 'ACCOUNT_GRPC',
